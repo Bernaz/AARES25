@@ -1,0 +1,95 @@
+---
+title: "Conference Data Analysis"
+author: "Your Name"
+date: "2025-01-28"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidyr)
+library(tidygeocoder)
+library(leaflet)
+library(htmlwidgets)
+
+# Load the Data
+papers <- read.csv('/Users/can154/Library/CloudStorage/OneDrive-CSIRO/AARES25 papers/DATA/latest from teams/Conference2025Registrations_22-01-25.csv')
+```
+
+## Number of Participants by Country
+This chart shows the number of participants from each country.
+
+```{r}
+countrynet <- papers %>% filter(Country != "") %>% group_by(Country) %>% tally() %>% arrange(desc(n)) %>% ungroup()
+
+renderPlot({
+  ggplot(countrynet, aes(x = reorder(Country, n), y = n)) +
+    geom_bar(stat = "identity", fill = "skyblue", width = 0.6) +
+    geom_text(aes(label = n), hjust = -0.1) +
+    coord_flip() +
+    labs(title = "Number of Participants by Country", x = NULL, y = NULL) +
+    theme_minimal()
+}, height = 400)
+```
+
+## Student Participation Breakdown
+This chart displays the proportion of student participants in the conference.
+
+```{r}
+students <- papers %>%
+  select(`Are.you.a.student.`) %>%
+  group_by(`Are.you.a.student.`) %>%
+  tally() %>% ungroup() %>%
+  mutate(percent = scales::percent(n / sum(n))) %>%
+  arrange(desc(n))
+```
+
+## Heat Map of Australian Participants by State
+This heatmap illustrates the distribution of participants across Australian states.
+
+```{r}
+australia <- papers %>% group_by(State.Region) %>% mutate(papers_group = n()) %>% ungroup()
+australia <- australia %>% arrange(desc(papers_group), State.Region) %>% select(State.Region, papers_group)
+australia <- australia %>% group_by(State.Region) %>% tally() %>% arrange(desc(n)) %>% ungroup() %>% filter(State.Region != "")
+```
+
+## Interactive Map of City-wise Participation
+This interactive map shows the geographic distribution of participants across Australian cities.
+
+```{r}
+auscity <- papers
+# Format City column
+auscity$City <- tolower(auscity$City)
+auscity$City <- stringr::str_to_sentence(auscity$City)
+auscity$City <- trimws(auscity$City)
+auscity <- auscity %>% select(City, State.Region)
+# Fill missing states
+auscity <- auscity %>% group_by(City) %>% arrange(City) %>%
+  mutate(State.Region = na_if(State.Region, "")) %>% 
+  fill(State.Region, .direction = "down") %>% ungroup() %>% 
+  mutate(geoloc = paste(City, State.Region, sep = " "))
+
+# Geocode city data
+auscity <- auscity %>%
+  geocode(address = geoloc, method = "osm")
+
+# Cleaning the data
+auscity <- auscity %>% filter(!is.na(State.Region))
+auscity2 <- auscity %>%
+  filter(!is.na(lat) & !is.na(long)) %>%
+  group_by(City) %>%
+  mutate(Count = n()) %>%
+  arrange(desc(Count)) %>% ungroup() %>% unique()
+
+renderLeaflet({
+  leaflet() %>% 
+    addTiles() %>% 
+    addProviderTiles(providers$CartoDB.Voyager) %>% 
+    addCircleMarkers(data = auscity2, radius = ~sqrt(Count) * 3, label = ~Count, stroke = FALSE, color = "blue",
+                     clusterOptions = markerClusterOptions())
+}, height = 500)
+```
