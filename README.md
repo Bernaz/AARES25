@@ -1,7 +1,8 @@
 # AARES25
-Demographics
 
-https://github.com/Bernaz/AARES25/AARES25.html
+Program PDF https://github.com/Bernaz/AARES25/AARES25_Handbook.pdf
+
+Network Map https://bernaz.shinyapps.io/aares25_network/
 
 
 
